@@ -22,11 +22,11 @@ internal static class LocalizationChecks
         check(AppLocalization.Text("Convert to JPG · Nashi","tr")=="JPG biçimine dönüştür · FlipFlop"&&AppLocalization.Text("Make it yours · Nashi","tr")==AppLocalization.Text("Make it yours","tr")+" · FlipFlop","Window titles were not translated before the app suffix");
         foreach(var value in new[]{"Home.png","MP4","Ctrl+Shift","⌘S","00:01.250"})check(AppLocalization.Text(value,"tr")==value,"Translation changed a format, path or shortcut");
         foreach(var (source,target) in AppLocalization.Turkish)check(Regex.Matches(source,@"\{[0-9]\}").Select(m=>m.Value).Order().SequenceEqual(Regex.Matches(target,@"\{[0-9]\}").Select(m=>m.Value).Order()),"Translation placeholders differ: "+source);
-        var directory=Path.Combine(root,"Localization preferences");var store=new PreferencesStore(directory);check(store.Value.Language=="en","Existing users changed language without choosing");
+        var directory=Path.Combine(root,"Localization preferences");var store=new PreferencesStore(directory);check(store.Value.Language==AppLocalization.Normalize(System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName),"Existing users changed language without choosing");
         store.Save(store.Value with{Language="tr",Feedback=false,ToolsModifier="Ctrl+Alt"});var loaded=new PreferencesStore(directory).Value;
         check(loaded.Language=="tr"&&!loaded.Feedback&&loaded.ToolsModifier=="Ctrl+Alt","Language persistence changed other preferences");
         var old=Path.Combine(root,"Legacy language preferences");Directory.CreateDirectory(old);File.WriteAllText(Path.Combine(old,"preferences.json"),"{\"Feedback\":false}");var legacy=new PreferencesStore(old);
-        check(legacy.Value.Language=="en"&&!legacy.Value.Feedback,"Legacy preference migration changed other values");
+        check(legacy.Value.Language==AppLocalization.Normalize(System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName)&&!legacy.Value.Feedback,"Legacy preference migration changed other values");
         check(AppLocalization.Normalize("fr")=="en"&&AppLocalization.Text("Home","en")=="Home","Unsupported language or English fallback failed");
     }
 }
