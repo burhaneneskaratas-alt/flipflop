@@ -298,7 +298,7 @@ internal static class UIAudit
             "settings.general" or "settings.formats" or "settings.updates" => subject is SettingsWindow &&
                 Descendants<ListBox>(subject).Any(list => Equals(list.SelectedItem, capture.Scene.Split('.')[1] switch { "formats" => "Formats", "updates" => "Updates", _ => "General" })),
             "wheel.pdf-multiple" => subject is WheelWindow && owner.SelectedFiles.SequenceEqual(fixtures.Pdfs) &&
-                Descendants<System.Windows.Shapes.Path>(subject).Count(path => path.Data is StreamGeometry) == FeatureCatalog.Tools(fixtures.Pdfs).Length,
+                Descendants<System.Windows.Shapes.Rectangle>(subject).Count(tile => tile.Tag as string == "tile") == FeatureCatalog.Tools(fixtures.Pdfs).Length,
             "editor.crop-image" => subject is ToolEditor crop && crop.FieldForTest("Width").Text == fixtures.Bitmap.PixelWidth.ToString(CultureInfo.CurrentCulture),
             "editor.annotate-image" => subject is ToolEditor && Descendants<ComboBox>(subject).Any(combo => Equals(combo.SelectedItem, "Marker")),
             "editor.frame-image" => subject is ToolEditor frame && frame.UIAuditPreviewReady &&
@@ -350,15 +350,20 @@ internal static class UIAudit
     private static void ValidateWheel(WheelWindow wheel, Capture capture)
     {
         var canvas = Descendants<Canvas>(wheel).FirstOrDefault();
-        var petals = canvas?.Children.OfType<System.Windows.Shapes.Path>().Where(path => path.Data is StreamGeometry).ToArray() ?? [];
+        var petals = canvas?.Children.OfType<System.Windows.Shapes.Rectangle>().Where(tile => tile.Tag as string == "tile").ToArray() ?? [];
         var captions = canvas?.Children.OfType<Button>().Take(petals.Length).ToArray() ?? [];
         var fits = petals.Length == 5 && captions.Length == petals.Length;
         if (canvas is not null)
         for (var index = 0; index < captions.Length; index++)
         {
             var bounds = captions[index].TransformToAncestor(canvas).TransformBounds(new Rect(captions[index].RenderSize));
-            if (new[] { bounds.TopLeft, bounds.TopRight, bounds.BottomLeft, bounds.BottomRight }.All(point => petals[index].Data.FillContains(point))) continue;
-            fits = false; capture.Issues.Add("Wheel caption exceeds its petal: " + Describe(captions[index]));
+            var tile = petals[index].TransformToAncestor(canvas).TransformBounds(new Rect(petals[index].RenderSize));
+            tile.Inflate(1.5, 1.5);
+            // The text must also fit inside the caption box, which is as large as its tile.
+            var label = captions[index].Content as FrameworkElement;
+            var textFits = label is null || label.DesiredSize.Height <= captions[index].ActualHeight && label.DesiredSize.Width <= captions[index].ActualWidth;
+            if (tile.Contains(bounds) && textFits) continue;
+            fits = false; capture.Issues.Add("Wheel caption exceeds its tile: " + Describe(captions[index]));
         }
         capture.Checks["wheelCaptionsContained"] = fits;
     }

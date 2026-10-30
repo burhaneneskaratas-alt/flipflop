@@ -13,6 +13,7 @@ public static class PublicUpdates
     private const string PublicKey="VPJpPpgXKda4c3ZOvP4zH8koa3ht1jm6lJWNBr+2saU=";
     public static async Task<WindowsUpdate?> CheckAsync(Version current,CancellationToken token=default)
     {
+        if(!Brand.UpdatesEnabled)return null;
         using var client=new HttpClient{Timeout=TimeSpan.FromSeconds(30)};client.DefaultRequestHeaders.UserAgent.ParseAdd("Nashi/"+current.ToString());
         using var response=await client.GetAsync(Feed,HttpCompletionOption.ResponseHeadersRead,token);
         if(response.StatusCode==System.Net.HttpStatusCode.NotFound)return null;response.EnsureSuccessStatusCode();
@@ -49,6 +50,6 @@ public static class PublicUpdates
             if(entry.FullName.EndsWith('/')){Directory.CreateDirectory(path);continue;}
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);entry.ExtractToFile(path);
         }
-        if(!File.Exists(Path.Combine(destination,"Nashi.exe")))throw new InvalidDataException("The update does not contain Nashi.");
+        if(!File.Exists(Path.Combine(destination,Brand.ExecutableName)))throw new InvalidDataException("The update does not contain Nashi.");
     }
 }

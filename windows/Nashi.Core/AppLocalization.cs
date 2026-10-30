@@ -6,10 +6,20 @@ namespace Nashi.Core;
 public static class AppLocalization
 {
     public static string Normalize(string? language)=>language=="tr"?"tr":"en";
+    // Search ignores case and accents the way people type: "seker" finds "şeker", "ani" finds "anı", "ISPARTA" finds "Isparta".
     public static bool Matches(string source,string query,string language)
     {
-        var compare=CultureInfo.GetCultureInfo(Normalize(language)).CompareInfo;
-        return compare.IndexOf(source,query,CompareOptions.IgnoreCase|CompareOptions.IgnoreNonSpace)>=0||compare.IndexOf(Text(source,language),query,CompareOptions.IgnoreCase|CompareOptions.IgnoreNonSpace)>=0;
+        var needle=Fold(query);return needle.Length==0||Fold(source).Contains(needle,StringComparison.Ordinal)||Fold(Text(source,language)).Contains(needle,StringComparison.Ordinal);
+    }
+    private static string Fold(string value)
+    {
+        var builder=new System.Text.StringBuilder(value.Length);
+        foreach(var character in value.Normalize(System.Text.NormalizationForm.FormD))
+        {
+            if(CharUnicodeInfo.GetUnicodeCategory(character)==UnicodeCategory.NonSpacingMark)continue;
+            builder.Append(character is 'ı' or 'İ'?'i':char.ToLowerInvariant(character));
+        }
+        return builder.ToString();
     }
     public static IReadOnlyDictionary<string,string> Turkish{get;}=Load();
     private static Dictionary<string,string> Load()
@@ -43,13 +53,14 @@ public static class AppLocalization
     private static bool WordBound(string key,string token)=>
         key.StartsWith(token,StringComparison.Ordinal)&&Regex.IsMatch(key[token.Length..],@"^ \p{L}")||
         key.EndsWith(token,StringComparison.Ordinal)&&Regex.IsMatch(key[..^token.Length],@"\p{L} $");
-    public static string Text(string source,string language)
+    public static string Text(string source,string language)=>Brand.Apply(TextCore(source,language));
+    private static string TextCore(string source,string language)
     {
         if(Normalize(language)!="tr")return source;
         if(Turkish.TryGetValue(source,out var exact)||uppercase.TryGetValue(source,out exact))return exact;
         if(source.Length>=16_384)return source;
         // Window titles: translate the title, keep the app suffix ("Convert to JPG · Nashi").
-        const string suffix=" · Nashi";if(source.Length>suffix.Length&&source.EndsWith(suffix,StringComparison.Ordinal))return Text(source[..^suffix.Length],language)+suffix;
+        const string suffix=" · Nashi";if(source.Length>suffix.Length&&source.EndsWith(suffix,StringComparison.Ordinal))return TextCore(source[..^suffix.Length],language)+suffix;
         foreach(var (pattern,target) in templates)
         {
             var match=pattern.Match(source);if(!match.Success)continue;

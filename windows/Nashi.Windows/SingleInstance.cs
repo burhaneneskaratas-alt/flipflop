@@ -9,7 +9,7 @@ internal sealed class SingleInstance:IDisposable
     internal bool Primary{get;}
     internal SingleInstance(string? testName=null)
     {
-        var name=testName??"Nashi.Desktop.v1."+Process.GetCurrentProcess().SessionId;pipe=name;mutex=new(false,"Local\\"+name);try{Primary=mutex.WaitOne(0);}catch(AbandonedMutexException){Primary=true;}
+        var name=testName??Nashi.Core.Brand.InstanceName+".Desktop.v1."+Process.GetCurrentProcess().SessionId;pipe=name;mutex=new(false,"Local\\"+name);try{Primary=mutex.WaitOne(0);}catch(AbandonedMutexException){Primary=true;}
     }
     internal void Start(Action<string[]> receive)
     {

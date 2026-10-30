@@ -13,7 +13,7 @@ internal sealed class FileGarden:Grid
     {
         Width=166;Height=150;IsHitTestVisible=false;
         var circle=new Ellipse{Width=144,Height=144};circle.SetResourceReference(Shape.FillProperty,"Sand");Children.Add(circle);
-        AddCard("PDF",-16,-34,12,"Muted");AddCard("PNG",7,31,-2,"Gold");
+        AddCard("PDF",-16,-34,12,"Muted");AddCard("PNG",7,31,-2,"GoldText");
         mark=new Image{Width=65,Height=65,RenderTransform=new TranslateTransform(0,42)};Children.Add(mark);SetSelected(false);
     }
     internal void SetSelected(bool selected)=>mark.Source=Artwork(selected?"NashiMarkHappy":"NashiMark");

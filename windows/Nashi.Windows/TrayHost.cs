@@ -10,7 +10,7 @@ internal sealed class TrayHost:IDisposable
     [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]private sealed class Notice
     {
         public uint Size;public IntPtr Window;public uint Id,Flags,Callback;public IntPtr Icon;
-        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]public string Tip="Nashi";
+        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]public string Tip=Nashi.Core.Brand.AppName;
         public uint State,StateMask;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=256)]public string Info="";public uint Version;
         [MarshalAs(UnmanagedType.ByValTStr,SizeConst=64)]public string InfoTitle="";public uint InfoFlags;public Guid Guid;public IntPtr BalloonIcon;
     }
@@ -25,7 +25,7 @@ internal sealed class TrayHost:IDisposable
     [DllImport("user32.dll",CharSet=CharSet.Unicode)]private static extern uint RegisterWindowMessage(string name);
     [DllImport("user32.dll")]private static extern bool SetForegroundWindow(IntPtr window);
     private TrayIconRecovery? recovery;private readonly HwndSource source;private readonly Notice notice;private readonly Action open;private readonly Func<ContextMenu> menu;private readonly uint taskbarCreated=RegisterWindowMessage("TaskbarCreated");
-    internal void UpdateAvailable(string version){notice.Tip="Nashi · Update "+version+" available";if(notice.Tip.Length>127)notice.Tip=notice.Tip[..127];notice.Flags=4;Shell_NotifyIcon(1,notice);}
+    internal void UpdateAvailable(string version){notice.Tip=Nashi.Core.Brand.AppName+" · Update "+version+" available";if(notice.Tip.Length>127)notice.Tip=notice.Tip[..127];notice.Flags=4;Shell_NotifyIcon(1,notice);}
     public TrayHost(Window window,Action open,Func<ContextMenu> menu)
     {
         this.open=open;this.menu=menu;var handle=new WindowInteropHelper(window).Handle;source=HwndSource.FromHwnd(handle);source.AddHook(Hook);notice=new(){Size=(uint)Marshal.SizeOf<Notice>(),Window=handle,Id=1,Flags=7,Callback=0x8000+710,Icon=MakeIcon()};if(!Shell_NotifyIcon(0,notice)){Dispose();throw new InvalidOperationException("Windows could not add Nashi to the system tray.");}recovery=new(()=>{notice.Flags=7;return Shell_NotifyIcon(0,notice);},ScheduleRestore,open);

@@ -31,6 +31,20 @@ internal static class L10n
         if(root is FrameworkElement element&&element.ToolTip is string tip&&!BindingOperations.IsDataBound(element,FrameworkElement.ToolTipProperty))Bind(element,FrameworkElement.ToolTipProperty,tip);
         for(var i=0;i<VisualTreeHelper.GetChildrenCount(root);i++)Attach(VisualTreeHelper.GetChild(root,i));
     }
+    // Fields sit under a text label, but nothing tells a screen reader which label belongs to which field.
+    internal static void LabelFields(DependencyObject root)
+    {
+        if(root is Panel panel)
+        {
+            TextBlock? label=null;
+            foreach(UIElement child in panel.Children)
+            {
+                if(child is TextBlock text&&!string.IsNullOrWhiteSpace(text.Text)){label=text;continue;}
+                if(label is not null&&(child is ComboBox||child is TextBox||child is Slider)&&string.IsNullOrEmpty(System.Windows.Automation.AutomationProperties.GetName(child))&&System.Windows.Automation.AutomationProperties.GetLabeledBy(child) is null)System.Windows.Automation.AutomationProperties.SetLabeledBy(child,label);
+            }
+        }
+        for(var i=0;i<VisualTreeHelper.GetChildrenCount(root);i++)LabelFields(VisualTreeHelper.GetChild(root,i));
+    }
     internal static void Choices(ItemsControl control)
     {
         var factory=new FrameworkElementFactory(typeof(TextBlock));

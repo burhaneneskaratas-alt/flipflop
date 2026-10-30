@@ -81,7 +81,7 @@ internal sealed class GlobalDropWheel:Window
     private readonly string mode;private readonly Action<IDataObject,string> chosen;private readonly Func<string?> hint;private readonly Canvas canvas=new(){Width=540,Height=540,Background=Brushes.Transparent,AllowDrop=true};private string selection="";private IReadOnlyList<ToolChoice> choices=[];
     public GlobalDropWheel(string mode,double scale,Action<IDataObject,string> chosen,Func<string?> hint)
     {
-        this.mode=mode;this.chosen=chosen;this.hint=hint;Title="Nashi · "+mode;Width=Height=WheelPresentation.Diameter*scale;WindowStyle=WindowStyle.None;AllowsTransparency=true;Background=Brushes.Transparent;ResizeMode=ResizeMode.NoResize;ShowInTaskbar=false;ShowActivated=false;Topmost=true;AllowDrop=true;Content=new Viewbox{Child=canvas};Build([]);Opacity=HiddenOpacity;
+        this.mode=mode;this.chosen=chosen;this.hint=hint;Title=Nashi.Core.Brand.AppName+" · "+mode;Width=Height=WheelPresentation.Diameter*scale;WindowStyle=WindowStyle.None;AllowsTransparency=true;Background=Brushes.Transparent;ResizeMode=ResizeMode.NoResize;ShowInTaskbar=false;ShowActivated=false;Topmost=true;AllowDrop=true;Content=new Viewbox{Child=canvas};Build([]);Opacity=HiddenOpacity;
         // Reveal only once the payload offers choices. On entry the pointer sits in the center,
         // so e.Effects is still None even for a valid file drag.
         DragEnter+=(_,e)=>{entered++;Track(e);if(choices.Count>0)Reveal();};
@@ -95,9 +95,9 @@ internal sealed class GlobalDropWheel:Window
         // again instead of advancing to DragOver. Keep the visual tree stable
         // until the payload actually changes, and select on entry as well.
         if(!updated.SequenceEqual(choices)){choices=updated;Build(choices);}
-        var p=e.GetPosition(canvas);var distance=(p-new Point(270,270)).Length;
-        if(distance<108||distance>250||choices.Count==0){selection="";Highlight(-1);}
-        else{var angle=(Math.Atan2(p.Y-270,p.X-270)*180/Math.PI-WheelPresentation.StartAngle(choices.Count)+360+180d/choices.Count)%360;var index=(int)(angle/(360d/choices.Count));var id=choices[index].Id;if(id!=selection){selection=id;Feedback.Play();}Highlight(index);}
+        var p=e.GetPosition(canvas);var hit=WheelLayout.IndexAt(p,choices.Count);
+        if(hit<0||choices.Count==0){selection="";Highlight(-1);}
+        else{var id=choices[hit].Id;if(id!=selection){selection=id;Feedback.Play();}Highlight(hit);}
         e.Effects=selection.Length>0?DragDropEffects.Copy:DragDropEffects.None;e.Handled=true;
     }
     private WebMediaPayload? Payload(IDataObject data)=>DragPayload.Parse(data,hint());
@@ -111,15 +111,15 @@ internal sealed class GlobalDropWheel:Window
         }
         if(web is null)return [];return web.Kind switch{"youtube"=>[new("download:video","Download Video","↓"),new("download:thumbnail","Download Thumbnail","▣"),new("download:audio","Download Audio","♫")],"instagramPhotos"=>[new("download:photos","Download Images","▣")],"instagramReel"=>[new("download:video","Download Video","↓"),new("download:audio","Download Audio","♫")],"image"=>[new("download:image","Download Image","↓")],_=>[new("download:video","Download Video","↓"),new("download:audio","Download Audio","♫") ]};
     }
-    private void Highlight(int index){var paths=canvas.Children.OfType<System.Windows.Shapes.Path>().ToArray();for(var n=0;n<paths.Length;n++){paths[n].Fill=Theme.Brush(n==index?"Sage":"Inset");paths[n].Stroke=Theme.Brush(n==index?"Gold":"Line");}}
+    private void Highlight(int index){var tiles=canvas.Children.OfType<System.Windows.Shapes.Rectangle>().Where(r=>r.Tag as string=="tile").ToArray();for(var n=0;n<tiles.Length;n++){tiles[n].Fill=WheelPresentation.SectorFill(n,n==index);tiles[n].Stroke=n==index?Theme.Brush("Gold"):null;}}
     private void Build(IReadOnlyList<ToolChoice> tools)
     {
-        canvas.Children.Clear();canvas.Children.Add(new Ellipse{Width=540,Height=540,Fill=WheelPresentation.Backdrop});var count=tools.Count;
+        canvas.Children.Clear();var panel=new Border{Width=530,Height=530,CornerRadius=new(46),Background=WheelPresentation.Backdrop,BorderThickness=new(1),IsHitTestVisible=false};panel.SetResourceReference(Border.BorderBrushProperty,"Line");Canvas.SetLeft(panel,5);Canvas.SetTop(panel,5);canvas.Children.Add(panel);var count=tools.Count;var cells=WheelLayout.Cells(count);
         for(var i=0;i<count;i++)
         {
-            var angle=(WheelPresentation.StartAngle(count)+360d*i/count)*Math.PI/180;var half=(180d/count-1)*Math.PI/180;Point P(double r,double a)=>new(270+r*Math.Cos(a),270+r*Math.Sin(a));var a=angle-half;var b=angle+half;var geometry=new StreamGeometry();using(var g=geometry.Open()){g.BeginFigure(P(108,a),true,true);g.LineTo(P(250,a),true,false);g.ArcTo(P(250,b),new(250,250),0,b-a>Math.PI,SweepDirection.Clockwise,true,false);g.LineTo(P(108,b),true,false);g.ArcTo(P(108,a),new(108,108),0,b-a>Math.PI,SweepDirection.Counterclockwise,true,false);}canvas.Children.Add(new System.Windows.Shapes.Path{Data=geometry,Fill=Theme.Brush("Inset"),Stroke=Theme.Brush("Line")});
-            var (stack,location)=WheelPresentation.Caption(tools[i],geometry,angle,half,count);var label=new Border{Child=stack,Width=stack.DesiredSize.Width,Height=stack.DesiredSize.Height,IsHitTestVisible=false};Canvas.SetLeft(label,location.X-label.Width/2);Canvas.SetTop(label,location.Y-label.Height/2);canvas.Children.Add(label);
+            var cell=cells[i];var tile=new System.Windows.Shapes.Rectangle{Width=cell.Width,Height=cell.Height,RadiusX=24,RadiusY=24,StrokeThickness=3,Fill=WheelPresentation.SectorFill(i,false),Tag="tile"};Canvas.SetLeft(tile,cell.X);Canvas.SetTop(tile,cell.Y);canvas.Children.Add(tile);
+            var stack=WheelPresentation.TileLabel(tools[i],cell.Width,cell.Height);var label=new Border{Child=stack,Width=cell.Width,Height=cell.Height,IsHitTestVisible=false};Canvas.SetLeft(label,cell.X);Canvas.SetTop(label,cell.Y);canvas.Children.Add(label);
         }
-        var center=new Border{Width=180,Height=180,IsHitTestVisible=false,Visibility=Revealed?Visibility.Visible:Visibility.Hidden,Child=L10n.Label(new TextBlock{Text=count==0?"Keep dragging\nDrop a file or link":mode=="convert"?"Convert":mode=="actions"?"File actions":"Tools",TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center,VerticalAlignment=VerticalAlignment.Center,FontSize=20,FontWeight=FontWeights.SemiBold,Foreground=Theme.Brush("Ink")} )};Canvas.SetLeft(center,180);Canvas.SetTop(center,180);canvas.Children.Add(center);
+        var center=new Border{Width=count==0?420:540,Height=count==0?140:60,IsHitTestVisible=false,Visibility=Revealed?Visibility.Visible:Visibility.Hidden,Child=L10n.Label(new TextBlock{Text=count==0?"Keep dragging\nDrop a file or link":mode=="convert"?"Convert":mode=="actions"?"File actions":"Tools",TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center,VerticalAlignment=VerticalAlignment.Center,FontSize=count==0?20:21,FontWeight=FontWeights.SemiBold,Foreground=Theme.Brush("Ink")} )};Canvas.SetLeft(center,count==0?60:0);Canvas.SetTop(center,count==0?200:30);canvas.Children.Add(center);
     }
 }

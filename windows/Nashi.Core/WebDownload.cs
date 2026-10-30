@@ -4,12 +4,42 @@ public sealed partial class WebDownload(Toolchain tools)
 {
     public static Uri Validate(string input)
     {
-        if(!Uri.TryCreate(input,UriKind.Absolute,out var url)||url.Scheme is not ("http" or "https")||!string.IsNullOrEmpty(url.UserInfo)||url.IsLoopback||url.Host.EndsWith(".local",StringComparison.OrdinalIgnoreCase))throw new ArgumentException("Paste a public http(s) media or page link.");return url;
+        if(!Uri.TryCreate(input,UriKind.Absolute,out var url)||url.Scheme is not ("http" or "https")||!string.IsNullOrEmpty(url.UserInfo)||NonPublicHost(url))throw new ArgumentException("Paste a public http(s) media or page link.");return url;
+    }
+    // A pasted link must not make yt-dlp or the image fetcher call into the user's own network or a cloud metadata
+    // service (169.254.169.254). IP literals are checked by range; bare and intranet-style names are refused outright.
+    // A public name that resolves to a private address is still reachable here, since DNS is not consulted.
+    // A public-looking name can still point at a private address, so resolve it first. The download tool resolves it again
+    // a moment later, which means this narrows the gap rather than closing it.
+    internal static async Task EnsurePublicAsync(Uri url,CancellationToken token)
+    {
+        if(System.Net.IPAddress.TryParse(url.DnsSafeHost,out _))return;
+        System.Net.IPAddress[] addresses;
+        try{addresses=await System.Net.Dns.GetHostAddressesAsync(url.DnsSafeHost,token);}
+        catch(System.Net.Sockets.SocketException){return;} // an unknown name is reported by the download tool itself
+        if(addresses.Any(NonPublicAddress))throw new ArgumentException("Paste a public http(s) media or page link.");
+    }
+    internal static bool NonPublicHost(Uri url)
+    {
+        var host=url.DnsSafeHost.TrimEnd('.');if(host.Length==0||url.IsLoopback)return true;
+        var scope=host.IndexOf('%');if(scope>=0)host=host[..scope];
+        if(System.Net.IPAddress.TryParse(host,out var address))return NonPublicAddress(address);
+        if(!host.Contains('.'))return true;
+        foreach(var suffix in new[]{".local",".localhost",".internal",".lan",".home.arpa",".intranet",".corp"})if(host.EndsWith(suffix,StringComparison.OrdinalIgnoreCase))return true;
+        return false;
+    }
+    internal static bool NonPublicAddress(System.Net.IPAddress address)
+    {
+        if(address.IsIPv4MappedToIPv6)address=address.MapToIPv4();
+        if(System.Net.IPAddress.IsLoopback(address))return true;var b=address.GetAddressBytes();
+        if(address.AddressFamily==System.Net.Sockets.AddressFamily.InterNetwork)
+            return b[0] is 0 or 10 or 127||b[0]>=224||(b[0]==100&&b[1] is >=64 and <=127)||(b[0]==169&&b[1]==254)||(b[0]==172&&b[1] is >=16 and <=31)||(b[0]==192&&b[1]==168)||(b[0]==192&&b[1]==0&&b[2]==0)||(b[0]==198&&b[1] is 18 or 19);
+        return address.Equals(System.Net.IPAddress.IPv6Any)||address.IsIPv6LinkLocal||address.IsIPv6SiteLocal||address.IsIPv6Multicast||(b[0]&0xFE)==0xFC;
     }
     public async Task<IReadOnlyList<string>> DownloadAsync(string input,string kind,string destination,IProgress<OperationProgress>? progress=null,CancellationToken token=default,int? maximumHeight=null,IReadOnlySet<int>? selectedPhotos=null)
     {
         if(maximumHeight is <2 or >16384)throw new ArgumentException("Choose a supported maximum video height.");
-        var payload=WebMediaPayload.Parse(input);var uri=Validate(payload?.Url??input);if(kind is not ("video" or "audio" or "thumbnail" or "photos" or "image"))throw new ArgumentException("Choose video, audio, thumbnail or images.");
+        var payload=WebMediaPayload.Parse(input);var uri=Validate(payload?.Url??input);await EnsurePublicAsync(uri,token);if(kind is not ("video" or "audio" or "thumbnail" or "photos" or "image"))throw new ArgumentException("Choose video, audio, thumbnail or images.");
         using var tx=new ExportTransaction(destination);
         if(kind=="image"||payload?.Kind=="image")return tx.Publish([await WebPhotos.DownloadImageAsync(uri.AbsoluteUri,tx.StagingDirectory,progress,token)],token);
         if(kind=="thumbnail"&&WebMediaPayload.YoutubeId(uri) is {} id)return tx.Publish([await WebPhotos.YoutubeThumbnail(id,tx.StagingDirectory,progress,token)],token);

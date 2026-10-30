@@ -76,7 +76,7 @@ public static partial class ImageEngine
                 default:throw new ArgumentException("Unsupported image tool.");
             }
             if(tool=="compress"&&!new[]{"jpg","png","heic","webp","avif"}.Contains(ext))ext="jpg";
-            var output=SafePaths.Unique(tx.StagingDirectory,Path.GetFileNameWithoutExtension(input)+(tool=="convert"?"":" "+tool)+"."+ext);
+            var output=SafePaths.Unique(tx.StagingDirectory,Path.GetFileNameWithoutExtension(input)+(tool=="convert"?"":" "+(tool switch{"compress"=>"Compressed","editImage"=>"Edited","annotate"=>"Annotated","crop"=>"Cropped","frameImage"=>"Framed","redactImage"=>"Redacted","removeMetadata"=>"Metadata","resize"=>"Resized","rotate"=>"Rotated","flip"=>"Flipped",_=>tool}))+"."+ext);
             if(tool=="compress")CompressImage(image,input,output,ext,options,token,progress);else Save(image,output,ext,options.Quality,options.EncoderPath,token);outputs.Add(output);progress?.Report(new(++completed/(double)inputs.Count*.98,"Saving images…"));
         }
         return tx.Publish(outputs,token);

@@ -109,7 +109,7 @@ internal sealed class WindowManagement:IDisposable
         var frame=placements[index].Frame(WorkArea(point));
         if(preview is null)
         {
-            preview=new Window{Title="Nashi Placement Preview",WindowStyle=WindowStyle.None,AllowsTransparency=true,
+            preview=new Window{Title=Nashi.Core.Brand.AppName+" Placement Preview",WindowStyle=WindowStyle.None,AllowsTransparency=true,
                 Background=Brushes.Transparent,ResizeMode=ResizeMode.NoResize,ShowInTaskbar=false,ShowActivated=false,Topmost=true,Focusable=false};
             preview.Content=new Border{Background=new SolidColorBrush(Color.FromArgb(35,225,189,99)),BorderBrush=Theme.Brush("Gold"),BorderThickness=new(2),CornerRadius=new(14),Margin=new(4)};
             PassThrough(preview);
