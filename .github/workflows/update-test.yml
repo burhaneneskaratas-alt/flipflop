@@ -64,6 +64,7 @@ jobs:
           if (([version]$new).ToString(3) -ne ([version]$expected).ToString(3)) { throw "Installed $new but the feed offered $expected" }
           if ($null -eq $restarted) { throw 'Updated app did not reopen a native window' }
           $restartedId = $restarted.Id
+          $restartedHandle = $restarted.Handle # keep the OS handle so the exit code stays readable
           $restarted.CloseMainWindow() | Out-Null
           if (!$restarted.WaitForExit(15000)) { throw 'Updated app did not close normally' }
           if ($restarted.ExitCode -ne 0) { throw "Updated app exited with code $($restarted.ExitCode)" }
