@@ -11,7 +11,7 @@ FlipFlop is a modified version of **[Nashi](https://github.com/orkunisitmak/nash
 - Turkish and English interface, light and dark theme, keyboard and screen-reader friendly.
 
 ## Download (Windows 10/11, 64-bit)
-No public download yet. When there is one it will be a ZIP on the [Releases](../../releases) page, with a SHA-256 checksum next to it.
+Get **FlipFlop-Windows-x64.zip** from the [latest release](../../releases/latest); the SHA-256 checksum is next to it.
 1. Extract the **whole** ZIP into its own folder (do not run `FlipFlop.exe` from inside the ZIP).
 2. Open `FlipFlop.exe`. Windows SmartScreen may warn because the app is not code-signed: choose **More info → Run anyway**.
 3. If **Smart App Control** is on (Windows Security → App & browser control), Windows refuses unsigned apps outright and FlipFlop will not start. Only turning Smart App Control off allows it, and Windows cannot turn it back on without a reset. Leave it on if you are unsure; a signed build is needed for those PCs.
