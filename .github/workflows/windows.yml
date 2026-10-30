@@ -2,12 +2,13 @@ name: Windows build and checks
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
   group: windows-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 jobs:
   windows:
     runs-on: windows-2025
@@ -64,3 +65,71 @@ jobs:
             build/ui-audit-light
             build/ui-audit-dark
           if-no-files-found: warn
+  # Tag pushes only. Runs apart from the build job so the signing key and write access
+  # never touch the steps that run downloaded tools and the app itself.
+  release:
+    needs: windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-2025
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: FlipFlop-Windows-x64
+          path: release
+      - name: Sign the ZIP, write the update feed, publish the release
+        shell: pwsh
+        env:
+          SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SIGNING_KEY) { throw 'The UPDATE_SIGNING_KEY secret is not set.' }
+          if ($env:TAG -notmatch '^v(\d+\.\d+\.\d+)$') { throw "Tag $($env:TAG) is not vMAJOR.MINOR.PATCH" }
+          $version = $Matches[1]
+          $zip = (Resolve-Path release/FlipFlop-Windows-x64.zip).Path
+          # The ZIP must really contain the version the tag claims.
+          $probe = Join-Path $env:RUNNER_TEMP 'probe'
+          New-Item -ItemType Directory -Force $probe | Out-Null
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead($zip)
+          try { [IO.Compression.ZipFileExtensions]::ExtractToFile($archive.GetEntry('FlipFlop.dll'), (Join-Path $probe 'FlipFlop.dll'), $true) } finally { $archive.Dispose() }
+          $built = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $probe 'FlipFlop.dll')).FileVersion
+          if ($built -ne "$version.0") { throw "Tag says $version but the build is $built" }
+          $openssl = 'C:\Program Files\Git\usr\bin\openssl.exe'
+          $key = Join-Path $env:RUNNER_TEMP 'update-key.pem'
+          $pub = Join-Path $env:RUNNER_TEMP 'update-pub.pem'
+          $der = Join-Path $env:RUNNER_TEMP 'update-pub.der'
+          $sig = Join-Path $env:RUNNER_TEMP 'update.sig'
+          [IO.File]::WriteAllText($key, $env:SIGNING_KEY.Trim() + "`n")
+          try {
+            & $openssl pkey -in $key -pubout -out $pub
+            if ($LASTEXITCODE -ne 0) { throw 'The signing key is not a valid private key.' }
+            & $openssl pkey -in $key -pubout -outform DER -out $der
+            if ($LASTEXITCODE -ne 0) { throw 'Could not export the public key.' }
+            # The key in the secret must be the one compiled into the app, or no installed copy could trust the update.
+            $bytes = [IO.File]::ReadAllBytes($der)
+            $rawPublic = [Convert]::ToBase64String($bytes[($bytes.Length - 32)..($bytes.Length - 1)])
+            $source = Get-Content windows/Nashi.Core/PublicUpdates.cs -Raw
+            if (-not $source.Contains("PublicKey=`"$rawPublic`"")) { throw 'The signing key does not match PublicUpdates.PublicKey.' }
+            & $openssl pkeyutl -sign -rawin -inkey $key -in $zip -out $sig
+            if ($LASTEXITCODE -ne 0) { throw 'Signing failed.' }
+            & $openssl pkeyutl -verify -rawin -pubin -inkey $pub -in $zip -sigfile $sig
+            if ($LASTEXITCODE -ne 0) { throw 'The fresh signature does not verify.' }
+          } finally { Remove-Item $key -Force -ErrorAction SilentlyContinue }
+          $feed = [ordered]@{
+            Version = $version
+            Url = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/download/$($env:TAG)/FlipFlop-Windows-x64.zip"
+            Length = (Get-Item $zip).Length
+            EdSignature = [Convert]::ToBase64String([IO.File]::ReadAllBytes($sig))
+          } | ConvertTo-Json
+          [IO.File]::WriteAllText((Join-Path (Get-Location) 'release/windows-update.json'), $feed, (New-Object Text.UTF8Encoding($false)))
+          Get-Content release/windows-update.json
+          gh release create $env:TAG --verify-tag --title "FlipFlop $version" --generate-notes release/FlipFlop-Windows-x64.zip release/SHA256SUMS.txt release/windows-update.json
+          if ($LASTEXITCODE -ne 0) { throw 'Creating the release failed.' }

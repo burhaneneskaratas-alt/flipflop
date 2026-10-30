@@ -16,6 +16,9 @@ Get **FlipFlop-Windows-x64.zip** from the [latest release](../../releases/latest
 2. Open `FlipFlop.exe`. Windows SmartScreen may warn because the app is not code-signed: choose **More info → Run anyway**.
 3. If **Smart App Control** is on (Windows Security → App & browser control), Windows refuses unsigned apps outright and FlipFlop will not start. Only turning Smart App Control off allows it, and Windows cannot turn it back on without a reset. Leave it on if you are unsure; a signed build is needed for those PCs.
 
+## Updates
+From 1.0.1 on, FlipFlop checks this repository's releases for a newer version, downloads it, checks its Ed25519 signature against the key built into the app, and replaces itself (the old folder is kept next to it as `FlipFlop.backup-…`). Turn it off under Settings → Updates. 1.0.0 has no updater; install 1.0.1 by hand once.
+
 ## Using it
 1. Drop a file on the window, press **Choose files**, or paste (`Ctrl+V`).
 2. Press **Open wheel** (or `Ctrl+Space`) and choose a tile. Dragging from Explorer works too: hold **Shift** (convert), **Ctrl** (tools) or **Alt** (file actions) while you drag.
@@ -33,7 +36,6 @@ The project folders and namespaces still say `Nashi` internally on purpose, so c
 
 ## Known limits
 - **Builds are not code-signed.** Windows SmartScreen warns, and **Smart App Control blocks unsigned apps** on machines where it is on. Signing is needed before sharing builds widely.
-- Automatic updates are switched off in this fork (the update feed and signing key belong to upstream).
 - Only the Windows app is maintained here. The macOS (Swift) sources are inherited from Nashi, are not built or tested, and no longer ship with artwork.
 - HTML files cannot be converted yet. ODF/RTF/legacy `.doc`/`.xls` files are not cleaned of external references before conversion.
 - Not hand-tested: Ctrl/Alt drag wheels, window-placement wheel, drawing tools (redact/annotate), tray icon, floating shelf.

@@ -13,5 +13,10 @@
     "repository": "actions/upload-artifact",
     "tag": "v6",
     "commit": "b7c566a772e6b6bfb58ed0dc250532a479d7789f"
+  },
+  "download-artifact": {
+    "repository": "actions/download-artifact",
+    "tag": "v7",
+    "commit": "37930b1c2abaa49bbe596cd826c3c89aef350131"
   }
 }

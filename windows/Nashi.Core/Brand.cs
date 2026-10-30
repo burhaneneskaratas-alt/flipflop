@@ -14,8 +14,8 @@ public static class Brand
     // Single-instance mutex/pipe prefix. Distinct from upstream so both builds can run side by side.
     public const string InstanceName=AppName;
     // A static readonly field, not a const, so disabled-update branches do not trip warnings-as-errors.
-    // Updates are off because the feed and signing key still belong to upstream.
-    public static readonly bool UpdatesEnabled=false;
+    // Updates come from this fork's own releases and are signed with its own key (see PublicUpdates).
+    public static readonly bool UpdatesEnabled=true;
     public static string DataRoot=>Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),DataFolderName);
     public static string ToolsRoot=>Path.Combine(DataRoot,"Tools");
 

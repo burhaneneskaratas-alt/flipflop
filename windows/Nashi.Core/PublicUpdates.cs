@@ -8,9 +8,10 @@ namespace Nashi.Core;
 public sealed record WindowsUpdate(string Version,string Url,long Length,string EdSignature);
 public static class PublicUpdates
 {
-    public const string Repository="orkunisitmak/nashi-app";
+    public const string Repository="burhaneneskaratas-alt/flipflop";
     public const string Feed="https://github.com/"+Repository+"/releases/latest/download/windows-update.json";
-    private const string PublicKey="VPJpPpgXKda4c3ZOvP4zH8koa3ht1jm6lJWNBr+2saU=";
+    // Raw Ed25519 public key. The private half lives only in the repository's UPDATE_SIGNING_KEY secret and a local backup.
+    private const string PublicKey="XI+jMy1iGI4QOAnXGcdRyV2d/vMNxUhFy3F4t13oDWY=";
     public static async Task<WindowsUpdate?> CheckAsync(Version current,CancellationToken token=default)
     {
         if(!Brand.UpdatesEnabled)return null;

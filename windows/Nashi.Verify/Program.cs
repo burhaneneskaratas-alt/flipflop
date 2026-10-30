@@ -86,7 +86,7 @@ try
     try{DocumentEngine.Unzip(unsafeZip,root);throw new Exception("Traversal archive succeeded");}catch(InvalidDataException){checks++;}
     Check(!File.Exists(Path.Combine(Path.GetDirectoryName(root)!,"outside.txt")),"Archive wrote outside destination");
     var fake=Path.Combine(root,"fake.zip");File.WriteAllText(fake,"untrusted");
-    var update=new WindowsUpdate("99.0.0.0","https://github.com/orkunisitmak/nashi-app/releases/download/test/Nashi.zip",new FileInfo(fake).Length,Convert.ToBase64String(new byte[64]));
+    var update=new WindowsUpdate("99.0.0.0","https://github.com/burhaneneskaratas-alt/flipflop/releases/download/test/FlipFlop.zip",new FileInfo(fake).Length,Convert.ToBase64String(new byte[64]));
     try{await PublicUpdates.VerifyAsync(fake,update);throw new Exception("Unsigned update accepted");}catch(InvalidDataException){checks++;}
     foreach(var url in new[]{"https://evil.example/replace.zip","file:///temp/file.zip","https://github.com/another/repo/releases/download/test/file.zip"})
     {try{PublicUpdates.Validate(update with{Url=url});throw new Exception("Untrusted update URL accepted");}catch(InvalidDataException){checks++;}}
