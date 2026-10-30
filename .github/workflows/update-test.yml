@@ -1,0 +1,83 @@
+name: Update test (older release updates itself to the latest)
+on:
+  workflow_dispatch:
+    inputs:
+      from_tag:
+        description: 'Release to install first (it must already contain the updater), e.g. v1.0.1'
+        required: true
+permissions:
+  contents: read
+jobs:
+  update:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install the old release, let it update itself from the public feed, check the result
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FROM_TAG: ${{ inputs.from_tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:FROM_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw 'from_tag must look like v1.0.1' }
+          $proof = Join-Path $env:GITHUB_WORKSPACE 'build/update-proof'
+          New-Item -ItemType Directory -Force $proof | Out-Null
+          # What the feed offers right now: the version the old app must end up on.
+          $feed = Invoke-RestMethod "https://github.com/$($env:GITHUB_REPOSITORY)/releases/latest/download/windows-update.json"
+          $expected = [string]$feed.Version
+          Write-Host "Feed offers $expected"
+          $zip = Join-Path $proof 'old.zip'
+          gh release download $env:FROM_TAG --repo $env:GITHUB_REPOSITORY --pattern FlipFlop-Windows-x64.zip --output $zip
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the old release.' }
+          # A disposable profile with data the update must not touch.
+          $data = Join-Path $env:LOCALAPPDATA 'FlipFlop'
+          $imports = Join-Path $data 'Imports'
+          New-Item -ItemType Directory -Force $imports | Out-Null
+          $text = Join-Path $imports 'Update persistence.txt'
+          'Kalıcı pano · Türkçe 🍐' | Set-Content -Encoding utf8 $text
+          $state = Join-Path $data 'library.json'
+          @{ Appearance = 'dark'; Entries = @(@{ Id = [guid]::NewGuid().ToString(); Created = [DateTimeOffset]::Now.ToString('o'); Action = 'Update persistence fixture'; Paths = @($text) }) } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 $state
+          # This profile closes on X so the test can read saved state; the product default keeps running in the tray.
+          $preferences = Join-Path $data 'preferences.json'
+          @{ KeepInTray = $false; AutomaticUpdateChecks = $true } | ConvertTo-Json | Set-Content -Encoding utf8 $preferences
+          $preferencesHash = (Get-FileHash $preferences).Hash
+          $stateHash = (Get-FileHash $state).Hash
+          $textHash = (Get-FileHash $text).Hash
+          $target = Join-Path $env:RUNNER_TEMP 'FlipFlop-Portable-Update'
+          Expand-Archive $zip $target
+          $old = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $target 'FlipFlop.dll')).FileVersion
+          Write-Host "Installed $old, expecting $expected"
+          powershell.exe -NoProfile -STA -File scripts/verify-windows-update-ui.ps1 -AppPath (Join-Path $target 'FlipFlop.exe') -ExpectedVersion $expected -ProofPath (Join-Path $proof 'native-update-ui.json')
+          if ($LASTEXITCODE -ne 0) { throw 'The native update UI test failed' }
+          $new = $old
+          $restarted = $null
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Seconds 2
+            if (Test-Path (Join-Path $target 'FlipFlop.dll')) { $new = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $target 'FlipFlop.dll')).FileVersion }
+            $restarted = Get-Process -Name FlipFlop -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq (Join-Path $target 'FlipFlop.exe') -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+            if ([version]$new -gt [version]$old -and $null -ne $restarted) { break }
+          }
+          if ([version]$new -le [version]$old) { throw 'Installed version did not advance' }
+          if (([version]$new).ToString(3) -ne ([version]$expected).ToString(3)) { throw "Installed $new but the feed offered $expected" }
+          if ($null -eq $restarted) { throw 'Updated app did not reopen a native window' }
+          $restartedId = $restarted.Id
+          $restarted.CloseMainWindow() | Out-Null
+          if (!$restarted.WaitForExit(15000)) { throw 'Updated app did not close normally' }
+          if ($restarted.ExitCode -ne 0) { throw "Updated app exited with code $($restarted.ExitCode)" }
+          if ((Get-FileHash $preferences).Hash -ne $preferencesHash) { throw 'Update changed saved preferences' }
+          if ((Get-FileHash $state).Hash -ne $stateHash -or (Get-FileHash $text).Hash -ne $textHash) { throw 'Update changed the saved Library or imports' }
+          # The old copy is kept next to the new one, not deleted.
+          $backups = @(Get-ChildItem (Split-Path $target) -Directory -Filter 'FlipFlop-Portable-Update.backup-*')
+          if ($backups.Count -ne 1) { throw "Expected one backup folder, found $($backups.Count)" }
+          @{ oldVersion = $old; newVersion = $new; fromTag = $env:FROM_TAG; signedArchiveVerified = $true; realInstallerAndRestart = $true; restartedProcessId = $restartedId; libraryPreserved = $true; preferencesPreserved = $true; backupKept = $true } | ConvertTo-Json | Set-Content (Join-Path $proof 'result.json')
+          Get-Content (Join-Path $proof 'result.json')
+          Remove-Item $zip
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: update-proof
+          path: build/update-proof
+          retention-days: 7
