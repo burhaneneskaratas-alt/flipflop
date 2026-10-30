@@ -1,0 +1,66 @@
+name: Windows build and checks
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish FlipFlop (win-x64, self-contained)
+        shell: pwsh
+        run: |
+          dotnet restore windows/Nashi.Windows --locked-mode
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet publish windows/Nashi.Windows -c Release --no-restore -o build/windows/FlipFlop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Engine and security checks with real FFmpeg exports
+        shell: pwsh
+        env:
+          NASHI_VERIFY_DOWNLOAD_TOOLS: '1'
+          NASHI_VERIFY_TOOLS_DIRECTORY: '${{ runner.temp }}\Nashi-Test-Tools'
+        run: |
+          dotnet run --project windows/Nashi.Verify -c Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Start the app and capture every screen (light and dark, Turkish)
+        shell: pwsh
+        run: |
+          foreach ($mode in 'light', 'dark') {
+            $out = Join-Path $env:GITHUB_WORKSPACE "build/ui-audit-$mode"
+            New-Item -ItemType Directory -Force $out | Out-Null
+            $p = Start-Process -FilePath (Resolve-Path build/windows/FlipFlop/FlipFlop.exe) -ArgumentList '--ui-audit', $out, '--appearance', $mode, '--language', 'tr' -PassThru
+            if (-not $p.WaitForExit(600000)) { $p.Kill($true); throw "UI audit ($mode) timed out" }
+            if ($p.ExitCode -ne 0) { throw "UI audit ($mode) failed with exit code $($p.ExitCode)" }
+          }
+      - name: Package ZIP and checksum
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build/release | Out-Null
+          Compress-Archive -Path build/windows/FlipFlop/* -DestinationPath build/release/FlipFlop-Windows-x64.zip -CompressionLevel Optimal
+          $hash = (Get-FileHash build/release/FlipFlop-Windows-x64.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  FlipFlop-Windows-x64.zip" | Set-Content build/release/SHA256SUMS.txt -Encoding ascii
+          Write-Host "SHA-256: $hash"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: FlipFlop-Windows-x64
+          path: build/release/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: ui-audit
+          path: |
+            build/ui-audit-light
+            build/ui-audit-dark
+          if-no-files-found: warn
